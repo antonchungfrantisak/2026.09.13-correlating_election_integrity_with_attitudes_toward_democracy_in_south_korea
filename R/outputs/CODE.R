@@ -30,24 +30,61 @@ clean_data <- raw_data |>
     W_WEIGHT
   ) |> 
   
-  # removing possible duplicated data entries
+
   dplyr::filter(
     is.na(D_INTERVIEW) | !duplicated(D_INTERVIEW)
+  ) |> 
+  
+  dplyr::mutate(
+    # removing possible duplicated data entries
+    dplyr::across(
+      c(Q224:Q232, Q238, Q250:Q252),
+      as.numeric
+    ),
+    # flipping the axis of the variables so the correlations can be uniformly interpreted
+    dplyr::across(
+      c(Q224, Q228, Q229, Q232, Q238),
+      \(x) 5 - x
+    )
   )
 
 # CORRELATONS
 ## 
 
-cor.test(
-  x = clean_data$Q229, 
-  y = clean_data$Q252, 
-  method = "spearman", 
-  exact = FALSE)
-
-correlation::correlation(
+correlation_results <- correlation::correlation(
   data = clean_data,
   select = c("Q224", "Q225", "Q226", "Q227", "Q228", "Q229", "Q230", "Q231", "Q232"),
   select2 = c("Q238", "Q250", "Q251", "Q252"),
   method = "spearman",
   p_adjust = "holm"
 )
+
+correlation_heatmap <- ggplot(
+  data = as.data.frame(correlation_results),
+  aes(
+    x = Parameter1,
+    y = Parameter2,
+    fill = rho
+  ) 
+) +
+geom_tile(color = "white") +
+geom_text(
+  aes(
+    label = sprintf("%.2f", rho)
+  )
+) + 
+scale_fill_gradient2(
+  low = "#B35806",
+  mid = "white",
+  high = "#2166AC",
+  midpoint = 0,
+  limits = c(-1, 1),
+  name = "Spearman RHO"
+) +
+labs(
+  x = "Attitudes toward democracy",
+  y = "Perceptions about integrity in Elections"
+) +
+theme_minimal()
+
+correlation_heatmap
