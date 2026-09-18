@@ -1,4 +1,4 @@
-# PACKAGES AND INITIALIZATION
+# PACKAGES AND INITIALIZATION ----
 if (!require("pacman")) 
   install.packages("pacman")
 library(pacman)
@@ -19,31 +19,36 @@ RAW_DATA_FILE <- here(
 
 raw_data <- read_dta(RAW_DATA_FILE)
 
-# DOWNSIZING THE DATA SET TO ONLY THE REQUIRED VARIABLES
+# DOWNSIZING THE DATA SET TO ONLY THE REQUIRED VARIABLES ----
 clean_data <- raw_data |> 
   dplyr::select(
     D_INTERVIEW,
-    Q224:Q232,
-    Q238,
-    Q250:Q252,
-    W_WEIGHT
+    Q224:Q232, # election integrity
+    Q238, # measures of democracy 
+    Q250:Q252, # measure of democracy
+    Q260, # sex
+    W_WEIGHT,
+    Q262, # age
+    Q275R, # education
+    Q240, # political orientation
+    Q223 # preference for political party
   ) |> 
   
-
-  dplyr::filter(
+    # removing possible duplicated data entries
+  dplyr::filter( 
     is.na(D_INTERVIEW) | !duplicated(D_INTERVIEW)
   ) |> 
   
+  # making the variables numerics
   dplyr::mutate(
-    # removing possible duplicated data entries
     dplyr::across(
-      c(Q224:Q232, Q238, Q250:Q252),
+      c(Q224:Q232, Q238, Q250:Q252, Q260),
       as.numeric
     )
 
   )
 
-# flipping the axis of the variables so the correlations can be uniformly interpreted
+## flipping the axis of the variables so the correlations can be uniformly interpreted ----
 uniformly_cleaned_data <- clean_data |> 
   dplyr::mutate(
     dplyr::across(
@@ -51,8 +56,7 @@ uniformly_cleaned_data <- clean_data |>
       \(x) 5 - x
     )
   )
-# CORRELATONS
-## 
+# CORRELATONS ----
 
 correlation_results <- correlation::correlation(
   data = uniformly_cleaned_data,
@@ -62,6 +66,7 @@ correlation_results <- correlation::correlation(
   p_adjust = "holm"
 )
 
+## creating the heat map ----
 correlation_heatmap <- ggplot(
   data = as.data.frame(correlation_results),
   aes(
@@ -106,7 +111,9 @@ theme_minimal()
 correlation_heatmap
 
 
-# DENSITY PLOT
+# DENSITY PLOT ----
+
+## PREPARING DATA FOR THE PLOT ----
 
 density_plot_data <- clean_data |> 
 # correct format for the plot
@@ -135,7 +142,7 @@ density_plot_data <- clean_data |>
     )
   )
 
-## GENERATING GRAPHS
+## GENERATING GRAPHS ----
 
 create_density_plot <- function(data, x, y, group, color, colors) {
   density_plot <- ggplot(
@@ -199,6 +206,8 @@ create_density_plot <- function(data, x, y, group, color, colors) {
   )
 }
 
+## FAIR PRACTICES IN ELECTIONS ----
+
 fair_practices_density_plot <- create_density_plot(
   data = dplyr::filter(
     density_plot_data,
@@ -213,6 +222,8 @@ fair_practices_density_plot <- create_density_plot(
 
 fair_practices_density_plot
 
+## MALPRACTICES IN ELECTIONS ----
+
 malpractices_density_plot <- create_density_plot(
   data = dplyr::filter(
     density_plot_data,
@@ -226,3 +237,154 @@ malpractices_density_plot <- create_density_plot(
 )
 
 malpractices_density_plot
+
+# BAR CHART FOR EACH INDIVIDUAL MEASURE DESCRIPTIVE STATISTICS ----
+
+## BAR PLOT FUNCTION ----
+
+create_bar_plot <- function(
+  data, y, fill, colors, label_data = data, include_overall = TRUE
+) {
+  # Get the question's label for the title.
+  y_name <- all.vars(substitute(y))[1]
+  y_label <- attr(label_data[[y_name]], "label")
+  if (is.null(y_label)) y_label <- y_name
+
+  # Keep the selected question and subgroup.
+  # Remove missing answers to the question.
+  data <- dplyr::transmute(
+    data,
+    response = {{ y }},
+    plot_group = {{ fill }}
+  ) |>
+    dplyr::filter(!is.na(response))
+
+  # Keep the subgroup order specified in your factor().
+  group_order <- if (is.factor(data$plot_group)) {
+    levels(data$plot_group)
+  } else {
+    unique(as.character(data$plot_group))
+  }
+
+  data <- dplyr::mutate(
+    data,
+    plot_group = as.character(plot_group)
+  )
+
+  # Automatically add the overall group and its grey colour.
+  if (include_overall) {
+    data <- dplyr::bind_rows(
+      dplyr::mutate(data, plot_group = "All respondents"),
+      data
+    )
+
+    group_order <- c("All respondents", group_order)
+    colors <- c("All respondents" = "#A0A0A0", colors)
+  }
+
+  # Calculate percentages separately within each group.
+  # Keep categories with zero responses.
+  plot_data <- data |>
+    dplyr::filter(!is.na(plot_group)) |>
+    dplyr::mutate(
+      plot_group = factor(plot_group, levels = group_order)
+    ) |>
+    dplyr::count(plot_group, response, .drop = FALSE) |>
+    dplyr::group_by(plot_group) |>
+    dplyr::mutate(group_n = sum(n)) |>
+    dplyr::filter(group_n > 0) |>
+    dplyr::mutate(proportion = n / group_n) |>
+    dplyr::ungroup()
+
+  if (nrow(plot_data) == 0) stop("No valid responses to plot.")
+
+  # Automatically calculate the valid counts for the caption.
+  group_counts <- dplyr::distinct(
+    plot_data, plot_group, group_n
+  )
+
+  caption <- paste0(
+    "Valid responses: ",
+    paste(
+      group_counts$plot_group,
+      group_counts$group_n,
+      sep = " = ",
+      collapse = "; "
+    ),
+    "."
+  )
+
+  # Use the same positioning for bars and labels.
+  dodge <- position_dodge(width = 0.9, orientation = "y")
+
+  ggplot(
+    plot_data,
+    aes(
+      x = proportion,
+      y = response,
+      fill = plot_group
+    )
+  ) +
+    geom_col(position = dodge) +
+
+    geom_text(
+      aes(
+        x = proportion / 2,
+        label = ifelse(
+          proportion < .05,
+          "",
+          scales::percent(proportion, accuracy = 0.1)
+        )
+      ),
+      position = dodge,
+      color = "white",
+      size = 3.5,
+      show.legend = FALSE
+    ) +
+
+    scale_x_continuous(
+      limits = c(0, 1),
+      labels = scales::label_percent()
+    ) +
+
+    scale_fill_manual(values = colors) +
+
+    labs(
+      title = y_label,
+      x = "Percentage within each group",
+      y = NULL,
+      fill = "Group",
+      caption = caption
+    )
+}
+
+## Q224 BY SEX ----
+
+q224_bar_plot <- create_bar_plot(
+  data = clean_data,
+  label_data = raw_data,
+
+  y = factor(
+    Q224,
+    levels = c(1, 2, 3, 4),
+    labels = c(
+      "Very Often",
+      "Fairly Often",
+      "Not Often",
+      "Not At All Often"
+    )
+  ),
+
+  fill = factor(
+    Q260,
+    levels = c(1, 2),
+    labels = c("Men", "Women")
+  ),
+
+  colors = c(
+    "Men" = "#355F4A",
+    "Women" = "#72947F"
+  )
+)
+
+q224_bar_plot
