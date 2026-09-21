@@ -57,7 +57,6 @@ uniformly_cleaned_data <- clean_data |>
     )
   )
 # CORRELATONS ----
-
 correlation_results <- correlation::correlation(
   data = uniformly_cleaned_data,
   select = c("Q224", "Q225", "Q226", "Q227", "Q228", "Q229", "Q230", "Q231", "Q232"),
@@ -142,7 +141,7 @@ density_plot_data <- clean_data |>
     )
   )
 
-## GENERATING GRAPHS ----
+## FUNCTION THAT GENERATES THE GRAPHS ----
 
 create_density_plot <- function(data, x, y, group, color, colors) {
   density_plot <- ggplot(
@@ -206,7 +205,7 @@ create_density_plot <- function(data, x, y, group, color, colors) {
   )
 }
 
-## FAIR PRACTICES IN ELECTIONS ----
+## FAIR PRACTICES IN ELECTIONS GRAPH ----
 
 fair_practices_density_plot <- create_density_plot(
   data = dplyr::filter(
@@ -222,7 +221,7 @@ fair_practices_density_plot <- create_density_plot(
 
 fair_practices_density_plot
 
-## MALPRACTICES IN ELECTIONS ----
+## MALPRACTICES IN ELECTIONS GRAPH----
 
 malpractices_density_plot <- create_density_plot(
   data = dplyr::filter(
@@ -358,7 +357,7 @@ create_bar_plot <- function(
     )
 }
 
-## Q224 BY SEX ----
+## How often in country's elections: Votes are counted fairly (Q224) BY SEX (Q260) ----
 
 q224_bar_plot <- create_bar_plot(
   data = clean_data,
@@ -384,6 +383,42 @@ q224_bar_plot <- create_bar_plot(
   colors = c(
     "Men" = "#355F4A",
     "Women" = "#72947F"
+  )
+)
+
+q224_bar_plot
+
+
+## How often in country's elections: Votes are counted fairly (Q224) BY SEX (Q262) ----
+
+q224_bar_plot <- create_bar_plot(
+  data = clean_data,
+  label_data = raw_data,
+
+  y = cut(
+    Q262,
+    breaks = c(18, 30, 40, 50, 60, 70, Inf),
+    labels = c("18–29", "30–39", "40–49", "50–59", "60–69", "70+"),
+    right = FALSE
+  ),
+    
+  
+  fill = factor(
+    Q224,
+    levels = c(1, 2, 3, 4),
+    labels = c(
+      "Very Often",
+      "Fairly Often",
+      "Not Often",
+      "Not At All Often"
+    )
+  ),
+
+  colors = c(
+    "Very Often" = "yellow",
+    "Fairly Often" = "green",
+    "Not Often" = "blue",
+    "Not At All Often" = "red"
   )
 )
 
